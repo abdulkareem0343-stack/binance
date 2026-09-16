@@ -4,7 +4,7 @@ import ccxt
 import streamlit as st
 
 st.set_page_config(page_title="Binance 15m RSI Scanner", layout="wide")
-st.title("🔥 Binance Top Gainers + RSI (30 - 40) Filter")
+st.title("🔥 Binance Top Gainers + RSI (30 - 50) Filter")
 st.write("15-Minute Timeframe par Scanner Live")
 
 # Binance Exchange Initialize
@@ -51,8 +51,8 @@ def fetch_filtered_coins():
             df['rsi'] = ta.momentum.rsi(df['close'], window=14)
             latest_rsi = round(df['rsi'].iloc[-1], 2)
             
-            # 4. Condition: RSI between 30 and 40
-            if 30 <= latest_rsi <= 40:
+            # 4. Condition: RSI between 30 and 50
+            if 30 <= latest_rsi <= 50:
                 matching_coins.append({
                     'Symbol': item['symbol'],
                     '24h Change (%)': f"+{item['change_24h']}%",
@@ -75,4 +75,4 @@ if st.button("🚀 Start Scan / Refresh"):
             st.success(f"Found {len(df_result)} Token(s) Matching Criteria!")
             st.dataframe(df_result, use_container_width=True)
         else:
-            st.warning("Abhi koi aisa Gainer coin nahi mila jiska 15m RSI 30-40 ke beech ho.")
+            st.warning("Abhi koi aisa Gainer coin nahi mila jiska 15m RSI 30-50 ke beech ho.")
