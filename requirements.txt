@@ -1,4 +1,4 @@
 ccxt
 pandas
-pandas-ta
 streamlit
+ta
