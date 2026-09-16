@@ -2,43 +2,33 @@ import pandas as pd
 import ta
 import ccxt
 import streamlit as st
-import time
 
 st.set_page_config(page_title="Binance 15m RSI Scanner", layout="wide")
 st.title("🔥 Binance Top Gainers + RSI (30 - 50) Filter")
 st.write("15-Minute Timeframe par Scanner Live")
 
-# Binance Exchange Initialize with timeout & retry options
-exchange = ccxt.binance({
+# Binance Futures Public API (Bypasses Regional Restrictions on Streamlit Cloud)
+exchange = ccxt.binanceusdm({
     'enableRateLimit': True,
     'timeout': 30000,
 })
 
-def fetch_tickers_safe():
-    # Try fetching tickers up to 3 times if exchange is unavailable
-    for attempt in range(3):
-        try:
-            return exchange.fetch_tickers()
-        except Exception as e:
-            if attempt < 2:
-                time.sleep(2)  # Wait 2 seconds before retry
-            else:
-                raise e
-
 def fetch_filtered_coins():
     try:
-        tickers = fetch_tickers_safe()
+        tickers = exchange.fetch_tickers()
     except Exception as e:
-        st.error(f"Binance Connection Error: {e}. Please wait 10 seconds and try again.")
+        st.error(f"Data Fetch Error: {e}")
         return pd.DataFrame()
 
-    # Filter USDT Pairs & 24h Gainers (> 0% Change)
     gainers = []
     for symbol, ticker in tickers.items():
-        if symbol.endswith('/USDT') and ticker.get('percentage') is not None:
-            if ticker['percentage'] > 0:
+        # Filtering USDT pairs and 24h gainers (>0%)
+        if symbol.endswith('/USDT:USDT') or symbol.endswith('/USDT'):
+            if ticker.get('percentage') is not None and ticker['percentage'] > 0:
+                clean_symbol = symbol.split(':')[0]
                 gainers.append({
-                    'symbol': symbol,
+                    'raw_symbol': symbol,
+                    'symbol': clean_symbol,
                     'change_24h': round(ticker['percentage'], 2),
                     'price': ticker['last']
                 })
@@ -55,7 +45,7 @@ def fetch_filtered_coins():
         progress_bar.progress((i + 1) / total)
         
         try:
-            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe='15m', limit=50)
+            ohlcv = exchange.fetch_ohlcv(item['raw_symbol'], timeframe='15m', limit=50)
             if not ohlcv or len(ohlcv) < 15:
                 continue
                 
@@ -63,6 +53,7 @@ def fetch_filtered_coins():
             df['rsi'] = ta.momentum.rsi(df['close'], window=14)
             latest_rsi = round(df['rsi'].iloc[-1], 2)
             
+            # Condition: RSI between 30 and 50
             if 30 <= latest_rsi <= 50:
                 matching_coins.append({
                     'Symbol': item['symbol'],
@@ -71,7 +62,6 @@ def fetch_filtered_coins():
                     'RSI (15m)': latest_rsi
                 })
         except Exception:
-            time.sleep(0.2)  # Short pause if rate limited
             continue
             
     status_text.empty()
