@@ -5,12 +5,17 @@ import streamlit as st
 
 st.set_page_config(page_title="Binance 15m RSI Scanner", layout="wide")
 st.title("🔥 Binance Top Gainers + RSI (30 - 50) Filter")
-st.write("15-Minute Timeframe par Scanner Live")
+st.write("15-Minute Timeframe par Live Scanner")
 
-# Binance Futures Public API (Bypasses Regional Restrictions on Streamlit Cloud)
-exchange = ccxt.binanceusdm({
+# Binance API with custom proxy endpoint to bypass US geoblock
+exchange = ccxt.binance({
     'enableRateLimit': True,
     'timeout': 30000,
+    'urls': {
+        'api': {
+            'public': 'https://data-api.binance.vision/api/v3',
+        }
+    }
 })
 
 def fetch_filtered_coins():
@@ -22,13 +27,10 @@ def fetch_filtered_coins():
 
     gainers = []
     for symbol, ticker in tickers.items():
-        # Filtering USDT pairs and 24h gainers (>0%)
-        if symbol.endswith('/USDT:USDT') or symbol.endswith('/USDT'):
-            if ticker.get('percentage') is not None and ticker['percentage'] > 0:
-                clean_symbol = symbol.split(':')[0]
+        if symbol.endswith('/USDT') and ticker.get('percentage') is not None:
+            if ticker['percentage'] > 0:
                 gainers.append({
-                    'raw_symbol': symbol,
-                    'symbol': clean_symbol,
+                    'symbol': symbol,
                     'change_24h': round(ticker['percentage'], 2),
                     'price': ticker['last']
                 })
@@ -39,13 +41,14 @@ def fetch_filtered_coins():
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    total = len(gainers)
-    for i, item in enumerate(gainers):
+    # Scanning top 100 gainers
+    total = min(len(gainers), 100)
+    for i, item in enumerate(gainers[:100]):
         status_text.text(f"Scanning {item['symbol']} ({i+1}/{total})...")
         progress_bar.progress((i + 1) / total)
         
         try:
-            ohlcv = exchange.fetch_ohlcv(item['raw_symbol'], timeframe='15m', limit=50)
+            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe='15m', limit=50)
             if not ohlcv or len(ohlcv) < 15:
                 continue
                 
@@ -69,7 +72,7 @@ def fetch_filtered_coins():
     return pd.DataFrame(matching_coins)
 
 if st.button("🚀 Start Scan / Refresh"):
-    with st.spinner("Scanning Binance Market..."):
+    with st.spinner("Scanning Market Data..."):
         df_result = fetch_filtered_coins()
         
         if not df_result.empty:
