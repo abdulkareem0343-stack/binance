@@ -1,8 +1,7 @@
 import pandas as pd
-import pandas_ta as ta
+import ta
 import ccxt
 import streamlit as st
-import time
 
 st.set_page_config(page_title="Binance 15m RSI Scanner", layout="wide")
 st.title("🔥 Binance Top Gainers + RSI (30 - 40) Filter")
@@ -48,8 +47,8 @@ def fetch_filtered_coins():
                 
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
-            # Calculate RSI (14)
-            df['rsi'] = ta.rsi(df['close'], length=14)
+            # Calculate RSI (14) using ta library
+            df['rsi'] = ta.momentum.rsi(df['close'], window=14)
             latest_rsi = round(df['rsi'].iloc[-1], 2)
             
             # 4. Condition: RSI between 30 and 40
