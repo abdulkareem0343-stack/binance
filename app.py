@@ -2,35 +2,50 @@ import pandas as pd
 import ta
 import ccxt
 import streamlit as st
+import time
 
 st.set_page_config(page_title="Binance 15m RSI Scanner", layout="wide")
 st.title("🔥 Binance Top Gainers + RSI (30 - 50) Filter")
 st.write("15-Minute Timeframe par Scanner Live")
 
-# Binance Exchange Initialize
-exchange = ccxt.binance({'enableRateLimit': True})
+# Binance Exchange Initialize with timeout & retry options
+exchange = ccxt.binance({
+    'enableRateLimit': True,
+    'timeout': 30000,
+})
+
+def fetch_tickers_safe():
+    # Try fetching tickers up to 3 times if exchange is unavailable
+    for attempt in range(3):
+        try:
+            return exchange.fetch_tickers()
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2)  # Wait 2 seconds before retry
+            else:
+                raise e
 
 def fetch_filtered_coins():
-    # 1. Fetch 24h tickers
-    tickers = exchange.fetch_tickers()
-    
-    # 2. Filter USDT Pairs & 24h Gainers (> 0% Change)
+    try:
+        tickers = fetch_tickers_safe()
+    except Exception as e:
+        st.error(f"Binance Connection Error: {e}. Please wait 10 seconds and try again.")
+        return pd.DataFrame()
+
+    # Filter USDT Pairs & 24h Gainers (> 0% Change)
     gainers = []
     for symbol, ticker in tickers.items():
         if symbol.endswith('/USDT') and ticker.get('percentage') is not None:
-            if ticker['percentage'] > 0:  # Gainer condition
+            if ticker['percentage'] > 0:
                 gainers.append({
                     'symbol': symbol,
                     'change_24h': round(ticker['percentage'], 2),
                     'price': ticker['last']
                 })
     
-    # Sort gainers by highest percentage
     gainers = sorted(gainers, key=lambda x: x['change_24h'], reverse=True)
-    
     matching_coins = []
 
-    # 3. Fetch 15m OHLCV and Calculate RSI (14)
     status_text = st.empty()
     progress_bar = st.progress(0)
     
@@ -40,18 +55,14 @@ def fetch_filtered_coins():
         progress_bar.progress((i + 1) / total)
         
         try:
-            # Fetch last 50 candles of 15m timeframe
             ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe='15m', limit=50)
             if not ohlcv or len(ohlcv) < 15:
                 continue
                 
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            
-            # Calculate RSI (14) using ta library
             df['rsi'] = ta.momentum.rsi(df['close'], window=14)
             latest_rsi = round(df['rsi'].iloc[-1], 2)
             
-            # 4. Condition: RSI between 30 and 50
             if 30 <= latest_rsi <= 50:
                 matching_coins.append({
                     'Symbol': item['symbol'],
@@ -60,13 +71,13 @@ def fetch_filtered_coins():
                     'RSI (15m)': latest_rsi
                 })
         except Exception:
+            time.sleep(0.2)  # Short pause if rate limited
             continue
             
     status_text.empty()
     progress_bar.empty()
     return pd.DataFrame(matching_coins)
 
-# UI Refresh Button
 if st.button("🚀 Start Scan / Refresh"):
     with st.spinner("Scanning Binance Market..."):
         df_result = fetch_filtered_coins()
