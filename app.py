@@ -3,115 +3,152 @@ import ta
 import ccxt
 import streamlit as st
 
-# Page Configuration
+# Page Configuration for Mobile App Look
 st.set_page_config(
-    page_title="Crypto RSI Scanner | Developed by Abdul Kareem",
+    page_title="Crypto Scanner App",
     page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for Styling & Branding Logo
+# Custom CSS for Native Android App Interface
 st.markdown("""
 <style>
-    .main-header {
-        background: linear-gradient(90deg, #1e222d 0%, #131722 100%);
-        padding: 20px;
-        border-radius: 12px;
-        border: 1px solid #2a2e39;
-        margin-bottom: 25px;
-        display: flex;
-        align-items: center;
-        gap: 20px;
+    /* Hide Streamlit default UI elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 5rem !important;
+        max-width: 500px !important;
     }
-    .app-logo {
-        width: 70px;
-        height: 70px;
-        background: linear-gradient(135deg, #2962ff 0%, #00e676 100%);
+    
+    /* Main App Background */
+    body {
+        background-color: #121212;
+        color: #e0e0e0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Mobile App Top Header Bar */
+    .app-header {
+        background: #1e1e1e;
+        padding: 15px 20px;
         border-radius: 16px;
         display: flex;
         align-items: center;
-        justify-content: center;
-        font-size: 36px;
-        box-shadow: 0 4px 15px rgba(41, 98, 255, 0.4);
+        justify-content: space-between;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        margin-bottom: 20px;
+        border: 1px solid #2c2c2c;
     }
-    .title-container {
-        flex-grow: 1;
-    }
-    .title-text {
+    .app-header-title {
+        font-size: 18px;
+        font-weight: 700;
         color: #ffffff;
-        font-size: 28px;
-        font-weight: 800;
-        margin: 0;
-        letter-spacing: 0.5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
-    .dev-badge {
-        background-color: #2962ff;
-        color: #ffffff;
-        font-size: 13px;
-        padding: 3px 10px;
-        border-radius: 20px;
+    .dev-tag {
+        font-size: 11px;
+        color: #2962ff;
+        background: rgba(41, 98, 255, 0.15);
+        padding: 3px 8px;
+        border-radius: 12px;
         font-weight: 600;
-        display: inline-block;
-        margin-top: 5px;
+    }
+
+    /* Mobile Coin Card */
+    .coin-card {
+        background: #1e1e1e;
+        border-radius: 16px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border: 1px solid #2a2a2a;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    .symbol-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #ffffff;
+    }
+    .gainer-tag {
+        background-color: rgba(0, 200, 83, 0.15);
+        color: #00e676;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: bold;
+    }
+    .card-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .price-text {
+        font-size: 15px;
+        font-weight: 600;
+        color: #b0bec5;
     }
     .rsi-badge {
-        background-color: #26a69a;
+        background: linear-gradient(135deg, #2962ff 0%, #00b0ff 100%);
         color: white;
         padding: 4px 10px;
-        border-radius: 6px;
+        border-radius: 8px;
+        font-size: 12px;
         font-weight: bold;
     }
+    
+    /* Native App Action Button */
     .stButton>button {
         width: 100%;
-        background: linear-gradient(90deg, #2962ff 0%, #1e88e5 100%);
+        background: linear-gradient(90deg, #2962ff 0%, #1565c0 100%);
         color: white;
         font-weight: bold;
-        border-radius: 8px;
-        height: 50px;
+        border-radius: 14px;
+        height: 52px;
         border: none;
         font-size: 16px;
+        box-shadow: 0 4px 12px rgba(41, 98, 255, 0.3);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# App Logo Header with Developer Name
+# Mobile Top Header
 st.markdown("""
-<div class="main-header">
-    <div class="app-logo">⚡</div>
-    <div class="title-container">
-        <div class="title-text">Crypto RSI Market Scanner</div>
-        <div class="dev-badge">👨‍💻 Developed by Abdul Kareem</div>
+<div class="app-header">
+    <div>
+        <div class="app-header-title">⚡ Crypto Scanner Pro</div>
+        <div class="dev-tag">By Abdul Kareem</div>
     </div>
+    <div style="font-size: 20px;">📱</div>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar Controls
-st.sidebar.header("⚙️ Scanner Settings")
+# Controls inside a mobile expansion card
+with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False):
+    timeframe = st.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
+    rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
+    top_gainers_count = st.slider("Scan Gainers Count", 20, 100, 50, step=10)
 
-timeframe = st.sidebar.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
-rsi_min, rsi_max = st.sidebar.slider("RSI Range Filter", 0, 100, (30, 50))
-top_gainers_count = st.sidebar.slider("Scan Top Gainers", 20, 150, 60, step=10)
-
-# Sidebar Footer Branding
-st.sidebar.markdown("---")
-st.sidebar.caption("🚀 Powered by KuCoin Market Data")
-st.sidebar.caption("© Created by Abdul Kareem")
-
-# Initialize KuCoin Exchange
-exchange = ccxt.kucoin({
-    'enableRateLimit': True,
-    'timeout': 30000,
-})
+# Exchange setup
+exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
 def fetch_filtered_coins():
     try:
         tickers = exchange.fetch_tickers()
     except Exception as e:
-        st.error(f"Data Fetch Error: {e}")
+        st.error(f"Error connecting: {e}")
         return []
 
-    # Filter USDT Pairs & 24h Gainers
     gainers = []
     for symbol, ticker in tickers.items():
         if symbol.endswith('/USDT') and ticker.get('percentage') is not None:
@@ -120,88 +157,69 @@ def fetch_filtered_coins():
                     'symbol': symbol,
                     'clean_symbol': symbol.replace('/USDT', ''),
                     'change_24h': round(ticker['percentage'], 2),
-                    'price': ticker['last'],
-                    'volume': round(ticker.get('quoteVolume', 0), 2)
+                    'price': ticker['last']
                 })
     
     gainers = sorted(gainers, key=lambda x: x['change_24h'], reverse=True)
     matching_coins = []
 
-    status_text = st.empty()
-    progress_bar = st.progress(0)
-    
-    scan_limit = min(len(gainers), top_gainers_count)
-    
-    for i, item in enumerate(gainers[:scan_limit]):
-        status_text.markdown(f"🔍 **Scanning:** `{item['symbol']}` ({i+1}/{scan_limit})")
-        progress_bar.progress((i + 1) / scan_limit)
+    status = st.empty()
+    progress = st.progress(0)
+    limit = min(len(gainers), top_gainers_count)
+
+    for i, item in enumerate(gainers[:limit]):
+        status.caption(f"Scanning {item['clean_symbol']} ({i+1}/{limit})...")
+        progress.progress((i + 1) / limit)
         
         try:
             ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=50)
             if not ohlcv or len(ohlcv) < 15:
                 continue
-                
+            
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['rsi'] = ta.momentum.rsi(df['close'], window=14)
             latest_rsi = round(df['rsi'].iloc[-1], 2)
             
-            # Check RSI Range Condition
             if rsi_min <= latest_rsi <= rsi_max:
-                logo_symbol = item['clean_symbol'].lower()
-                icon_url = f"https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/{logo_symbol}.png"
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
-                
                 matching_coins.append({
-                    'logo': icon_url,
                     'symbol': item['clean_symbol'],
-                    'full_symbol': item['symbol'],
                     'change_24h': item['change_24h'],
                     'price': item['price'],
-                    'volume': f"${item['volume']:,.0f}",
                     'rsi': latest_rsi,
-                    'chart_url': tv_link
+                    'chart': tv_link
                 })
         except Exception:
             continue
             
-    status_text.empty()
-    progress_bar.empty()
+    status.empty()
+    progress.empty()
     return matching_coins
 
-# Main Scan Button
-if st.button("🚀 Start Market Scan"):
-    with st.spinner("Fetching Market Data & Calculating Indicators..."):
+# Main Mobile Scan Trigger Button
+if st.button("🚀 Start App Scan"):
+    with st.spinner("Scanning Market..."):
         results = fetch_filtered_coins()
         
         if results:
-            st.success(f"🎯 **Found {len(results)} Token(s)** matching RSI ({rsi_min} - {rsi_max}) on {timeframe} Timeframe!")
+            st.caption(f"Found {len(results)} Token(s) | Timeframe: {timeframe}")
             
-            # Display Metric Summary Header
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Scanned", f"{top_gainers_count} Gainers")
-            m2.metric("Matched Tokens", f"{len(results)}")
-            m3.metric("Selected Timeframe", timeframe)
-            
-            st.divider()
-            
-            # Custom Table Display with Logos
+            # Render App Cards
             for coin in results:
-                col1, col2, col3, col4, col5, col6 = st.columns([1, 2, 2, 2, 2, 2])
+                st.markdown(f"""
+                <div class="coin-card">
+                    <div class="card-top">
+                        <span class="symbol-title">🪙 {coin['symbol']}/USDT</span>
+                        <span class="gainer-tag">+{coin['change_24h']}%</span>
+                    </div>
+                    <div class="card-bottom">
+                        <span class="price-text">${coin['price']}</span>
+                        <span class="rsi-badge">RSI: {coin['rsi']}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                with col1:
-                    st.image(coin['logo'], width=35)
-                with col2:
-                    st.markdown(f"**{coin['symbol']}**")
-                    st.caption("USDT")
-                with col3:
-                    st.markdown(f"📈 **+{coin['change_24h']}%**")
-                with col4:
-                    st.markdown(f"💵 **${coin['price']}**")
-                with col5:
-                    st.markdown(f"<span class='rsi-badge'>RSI: {coin['rsi']}</span>", unsafe_allow_html=True)
-                with col6:
-                    st.markdown(f"[📊 Chart]({coin['chart_url']})")
-                
-                st.divider()
+                st.markdown(f"[📊 Open TradingView Chart]({coin['chart']})")
+                st.write("")
         else:
-            st.warning(f"Abhi koi aisa Gainer coin nahi mila jiska {timeframe} RSI {rsi_min} se {rsi_max} ke beech ho.")
+            st.warning(f"Koi coin nahi mila jiska RSI {rsi_min}-{rsi_max} ho.")
