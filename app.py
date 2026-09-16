@@ -5,22 +5,55 @@ import streamlit as st
 
 # Page Configuration
 st.set_page_config(
-    page_title="Pro Crypto RSI Scanner",
+    page_title="Crypto RSI Scanner | Developed by Abdul Kareem",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling (CSS)
+# Custom CSS for Styling & Branding Logo
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #1E222D;
-        border-radius: 10px;
-        padding: 15px;
-        border: 1px solid #2A2E39;
-        text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    .main-header {
+        background: linear-gradient(90deg, #1e222d 0%, #131722 100%);
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid #2a2e39;
+        margin-bottom: 25px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+    }
+    .app-logo {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #2962ff 0%, #00e676 100%);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 36px;
+        box-shadow: 0 4px 15px rgba(41, 98, 255, 0.4);
+    }
+    .title-container {
+        flex-grow: 1;
+    }
+    .title-text {
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: 800;
+        margin: 0;
+        letter-spacing: 0.5px;
+    }
+    .dev-badge {
+        background-color: #2962ff;
+        color: #ffffff;
+        font-size: 13px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-weight: 600;
+        display: inline-block;
+        margin-top: 5px;
     }
     .rsi-badge {
         background-color: #26a69a;
@@ -31,18 +64,27 @@ st.markdown("""
     }
     .stButton>button {
         width: 100%;
-        background-color: #2962FF;
+        background: linear-gradient(90deg, #2962ff 0%, #1e88e5 100%);
         color: white;
         font-weight: bold;
         border-radius: 8px;
-        height: 48px;
+        height: 50px;
+        border: none;
+        font-size: 16px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# App Title & Header
-st.title("⚡ Pro Crypto Market Scanner")
-st.caption("Real-time 15m RSI & Top Gainers Scanner powered by KuCoin Data")
+# App Logo Header with Developer Name
+st.markdown("""
+<div class="main-header">
+    <div class="app-logo">⚡</div>
+    <div class="title-container">
+        <div class="title-text">Crypto RSI Market Scanner</div>
+        <div class="dev-badge">👨‍💻 Developed by Abdul Kareem</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # Sidebar Controls
 st.sidebar.header("⚙️ Scanner Settings")
@@ -50,6 +92,11 @@ st.sidebar.header("⚙️ Scanner Settings")
 timeframe = st.sidebar.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
 rsi_min, rsi_max = st.sidebar.slider("RSI Range Filter", 0, 100, (30, 50))
 top_gainers_count = st.sidebar.slider("Scan Top Gainers", 20, 150, 60, step=10)
+
+# Sidebar Footer Branding
+st.sidebar.markdown("---")
+st.sidebar.caption("🚀 Powered by KuCoin Market Data")
+st.sidebar.caption("© Created by Abdul Kareem")
 
 # Initialize KuCoin Exchange
 exchange = ccxt.kucoin({
@@ -100,11 +147,8 @@ def fetch_filtered_coins():
             
             # Check RSI Range Condition
             if rsi_min <= latest_rsi <= rsi_max:
-                # Token Logo URL via CryptoIcons API
                 logo_symbol = item['clean_symbol'].lower()
                 icon_url = f"https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/{logo_symbol}.png"
-                
-                # TradingView Link
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
                 
                 matching_coins.append({
@@ -124,7 +168,7 @@ def fetch_filtered_coins():
     progress_bar.empty()
     return matching_coins
 
-# Main Scan Trigger Button
+# Main Scan Button
 if st.button("🚀 Start Market Scan"):
     with st.spinner("Fetching Market Data & Calculating Indicators..."):
         results = fetch_filtered_coins()
