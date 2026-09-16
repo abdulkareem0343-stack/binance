@@ -3,19 +3,14 @@ import ta
 import ccxt
 import streamlit as st
 
-st.set_page_config(page_title="Binance 15m RSI Scanner", layout="wide")
-st.title("🔥 Binance Top Gainers + RSI (30 - 50) Filter")
-st.write("15-Minute Timeframe par Live Scanner")
+st.set_page_config(page_title="Crypto 15m RSI Scanner", layout="wide")
+st.title("🔥 Top Gainers + RSI (30 - 50) Filter")
+st.write("15-Minute Timeframe par Scanner Live")
 
-# Binance API with custom proxy endpoint to bypass US geoblock
-exchange = ccxt.binance({
+# Public exchange API without geoblocks
+exchange = ccxt.kucoin({
     'enableRateLimit': True,
     'timeout': 30000,
-    'urls': {
-        'api': {
-            'public': 'https://data-api.binance.vision/api/v3',
-        }
-    }
 })
 
 def fetch_filtered_coins():
@@ -41,8 +36,7 @@ def fetch_filtered_coins():
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    # Scanning top 100 gainers
-    total = min(len(gainers), 100)
+    total = len(gainers[:100]) # Scan top 100 gainers
     for i, item in enumerate(gainers[:100]):
         status_text.text(f"Scanning {item['symbol']} ({i+1}/{total})...")
         progress_bar.progress((i + 1) / total)
@@ -56,7 +50,6 @@ def fetch_filtered_coins():
             df['rsi'] = ta.momentum.rsi(df['close'], window=14)
             latest_rsi = round(df['rsi'].iloc[-1], 2)
             
-            # Condition: RSI between 30 and 50
             if 30 <= latest_rsi <= 50:
                 matching_coins.append({
                     'Symbol': item['symbol'],
