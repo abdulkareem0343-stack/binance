@@ -1,1 +1,1 @@
-# binance
+# Crypto Rsi Scanner 
