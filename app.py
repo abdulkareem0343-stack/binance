@@ -162,8 +162,16 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
     rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
     top_gainers_count = st.slider("Scan Gainers Count", 20, 400, 150, step=10)
 
-# Switch Exchange directly to Binance for exact price & RSI calculations
-exchange = ccxt.binance({'enableRateLimit': True, 'timeout': 30000})
+# Configure CCXT Binance to use Public Unrestricted Data Endpoints
+exchange = ccxt.binance({
+    'enableRateLimit': True,
+    'timeout': 30000,
+    'urls': {
+        'api': {
+            'public': 'https://data-api.binance.vision/api/v3',
+        }
+    }
+})
 
 # Exact Binance/TradingView Wilder's RSI Formula
 def calculate_binance_rsi(prices, period=14):
@@ -188,7 +196,7 @@ def get_binance_all_data():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     }
 
-    # 1. Fetch Binance Spot Assets
+    # 1. Fetch Binance Spot Assets via Public Mirror
     try:
         res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", headers=headers, timeout=10)
         if res.status_code == 200:
@@ -242,7 +250,7 @@ def fetch_filtered_coins():
     try:
         tickers = exchange.fetch_tickers()
     except Exception as e:
-        st.error(f"Error connecting to Binance: {e}")
+        st.error(f"Error connecting to Binance API: {e}")
         return []
 
     gainers = []
@@ -268,7 +276,7 @@ def fetch_filtered_coins():
         progress.progress((i + 1) / limit)
         
         try:
-            # Fetch Binance candles
+            # Fetch Binance candles from public endpoint
             ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=200)
             if not ohlcv or len(ohlcv) < 30:
                 continue
