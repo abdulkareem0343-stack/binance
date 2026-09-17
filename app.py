@@ -162,19 +162,11 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
     rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
     top_gainers_count = st.slider("Scan Gainers Count", 20, 400, 150, step=10)
 
-# Configure CCXT Binance to use Public Unrestricted Data Endpoints
-exchange = ccxt.binance({
-    'enableRateLimit': True,
-    'timeout': 30000,
-    'urls': {
-        'api': {
-            'public': 'https://data-api.binance.vision/api/v3',
-        }
-    }
-})
+# KuCoin Exchange Integration
+exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
-# Exact Binance/TradingView Wilder's RSI Formula
-def calculate_binance_rsi(prices, period=14):
+# Exact Wilder's RSI (14) Formula
+def calculate_rsi14(prices, period=14):
     delta = prices.diff()
     gain = (delta.where(delta > 0, 0))
     loss = (-delta.where(delta < 0, 0))
@@ -196,7 +188,7 @@ def get_binance_all_data():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     }
 
-    # 1. Fetch Binance Spot Assets via Public Mirror
+    # Fetch Binance Spot Assets for Tagging
     try:
         res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", headers=headers, timeout=10)
         if res.status_code == 200:
@@ -207,7 +199,7 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 2. Fetch Binance Futures Assets
+    # Fetch Binance Futures Assets for Tagging
     try:
         res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", headers=headers, timeout=10)
         if res_f.status_code == 200:
@@ -221,7 +213,7 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 3. Binance Alpha Pool Direct List
+    # Binance Alpha Pool Direct List
     try:
         url_alpha = "https://www.binance.com/bapi/composite/v1/public/promo/cmc/alpha/token/list"
         res_a = requests.get(url_alpha, headers=headers, timeout=10)
@@ -250,7 +242,7 @@ def fetch_filtered_coins():
     try:
         tickers = exchange.fetch_tickers()
     except Exception as e:
-        st.error(f"Error connecting to Binance API: {e}")
+        st.error(f"Error connecting to KuCoin: {e}")
         return []
 
     gainers = []
@@ -272,22 +264,22 @@ def fetch_filtered_coins():
     limit = min(len(gainers), top_gainers_count)
 
     for i, item in enumerate(gainers[:limit]):
-        status.caption(f"Scanning Binance {item['clean_symbol']} ({i+1}/{limit})...")
+        status.caption(f"Scanning KuCoin {item['clean_symbol']} ({i+1}/{limit})...")
         progress.progress((i + 1) / limit)
         
         try:
-            # Fetch Binance candles from public endpoint
+            # Fetch KuCoin OHLCV Candles (200 limit for exact RSI 14 calculation)
             ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=200)
             if not ohlcv or len(ohlcv) < 30:
                 continue
             
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
-            # Exact Binance RSI calculation
-            latest_rsi = calculate_binance_rsi(df['close'], period=14)
+            # Standard RSI 14 Calculation
+            latest_rsi = calculate_rsi14(df['close'], period=14)
             
             if rsi_min <= latest_rsi <= rsi_max:
-                tv_link = f"https://www.tradingview.com/chart/?symbol=BINANCE:{item['clean_symbol']}USDT"
+                tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
                 
                 coin_code = item['clean_symbol']
                 
@@ -316,11 +308,11 @@ def fetch_filtered_coins():
 
 # Main Mobile Scan Trigger Button
 if st.button("🚀 Start App Scan"):
-    with st.spinner("Scanning Binance Market..."):
+    with st.spinner("Scanning KuCoin Market..."):
         results = fetch_filtered_coins()
         
         if results:
-            st.caption(f"Found {len(results)} Token(s) | Sorted Low to High RSI")
+            st.caption(f"Found {len(results)} Token(s) | Sorted Low to High RSI (14)")
             
             for coin in results:
                 spot_tag = '<span class="spot-badge">BINANCE SPOT</span>' if coin['is_spot'] else ''
@@ -337,12 +329,12 @@ if st.button("🚀 Start App Scan"):
                     </div>
                     <div class="card-bottom">
                         <span class="price-text">${coin['price']}</span>
-                        <span class="rsi-badge">RSI: {coin['rsi']}</span>
+                        <span class="rsi-badge">RSI(14): {coin['rsi']}</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                st.markdown(f"[📊 Open Binance TradingView Chart]({coin['chart']})")
+                st.markdown(f"[📊 Open KuCoin TradingView Chart]({coin['chart']})")
                 st.write("")
         else:
             st.warning(f"Koi coin nahi mila jiska RSI {rsi_min}-{rsi_max} ho.")
