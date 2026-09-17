@@ -14,7 +14,6 @@ st.set_page_config(
 # Custom CSS for Native Android App Interface
 st.markdown("""
 <style>
-    /* Hide Streamlit default UI elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -24,14 +23,12 @@ st.markdown("""
         max-width: 500px !important;
     }
     
-    /* Main App Background */
     body {
         background-color: #121212;
         color: #e0e0e0;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Mobile App Top Header Bar */
     .app-header {
         background: #1e1e1e;
         padding: 15px 20px;
@@ -60,7 +57,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Mobile Coin Card */
     .coin-card {
         background: #1e1e1e;
         border-radius: 16px;
@@ -107,7 +103,6 @@ st.markdown("""
         font-weight: bold;
     }
     
-    /* Native App Action Button */
     .stButton>button {
         width: 100%;
         background: linear-gradient(90deg, #2962ff 0%, #1565c0 100%);
@@ -133,14 +128,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Controls inside a mobile expansion card
+# Controls
 with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False):
     timeframe = st.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
     rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
-    # Limit increased up to 250 coins
-    top_gainers_count = st.slider("Scan Gainers Count", 20, 250, 100, step=10)
+    # Limit increased to 400
+    top_gainers_count = st.slider("Scan Gainers Count", 20, 400, 150, step=10)
 
-# Exchange setup
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
 def fetch_filtered_coins():
@@ -195,6 +189,9 @@ def fetch_filtered_coins():
             
     status.empty()
     progress.empty()
+    
+    # Sort results by RSI ascending (low to high)
+    matching_coins = sorted(matching_coins, key=lambda x: x['rsi'])
     return matching_coins
 
 # Main Mobile Scan Trigger Button
@@ -203,7 +200,7 @@ if st.button("🚀 Start App Scan"):
         results = fetch_filtered_coins()
         
         if results:
-            st.caption(f"Found {len(results)} Token(s) | Timeframe: {timeframe}")
+            st.caption(f"Found {len(results)} Token(s) | Sorted Low to High RSI")
             
             # Render App Cards
             for coin in results:
