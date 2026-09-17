@@ -165,46 +165,53 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
 
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
-# Fetch All Binance Spot, Futures, and Alpha ecosystem tokens
-@st.cache_data(ttl=3600)
+# Fetch All Binance Spot, Futures, and Alpha Ecosystem Tokens
+@st.cache_data(ttl=1800)
 def get_binance_all_data():
-    spot_symbols = set()
-    futures_symbols = set()
-    alpha_symbols = set()
+    spot_assets = set()
+    futures_assets = set()
+    alpha_assets = set()
     
-    # 1. Binance Spot Pairs
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+
+    # 1. Binance Spot Assets
     try:
-        res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", timeout=10)
+        res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", headers=headers, timeout=10)
         data = res.json()
         for s in data.get('symbols', []):
             if s.get('status') == 'TRADING' and s['symbol'].endswith('USDT'):
-                spot_symbols.add(s['baseAsset'])
+                spot_assets.add(s['baseAsset'].upper())
     except Exception:
         pass
 
-    # 2. Binance Futures Pairs
+    # 2. Binance Futures Assets
     try:
-        res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=10)
+        res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", headers=headers, timeout=10)
         data_f = res_f.json()
         for s in data_f.get('symbols', []):
             if s.get('status') == 'TRADING' and s['symbol'].endswith('USDT'):
-                futures_symbols.add(s['baseAsset'])
+                futures_assets.add(s['baseAsset'].upper())
     except Exception:
         pass
 
-    # 3. Binance Alpha / Web3 / Trending Lists
+    # 3. Binance Alpha Pool & Web3 Early Tokens
     try:
-        res_a = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", timeout=10)
+        # Querying Binance Web3 / Alpha Token List API
+        url_alpha = "https://www.binance.com/bapi/composite/v1/public/promo/cmc/alpha/token/list"
+        res_a = requests.get(url_alpha, headers=headers, timeout=10)
         if res_a.status_code == 200:
-            for item in res_a.json():
-                symbol = item.get('symbol', '')
-                if symbol.endswith('USDT'):
-                    clean = symbol.replace('USDT', '')
-                    alpha_symbols.add(clean)
+            data_a = res_a.json()
+            tokens = data_a.get('data', [])
+            for t in tokens:
+                sym = t.get('symbol', '').upper()
+                if sym:
+                    alpha_assets.add(sym)
     except Exception:
         pass
 
-    return spot_symbols, futures_symbols, alpha_symbols
+    return spot_assets, futures_assets, alpha_assets
 
 def fetch_filtered_coins():
     spot_assets, futures_assets, alpha_assets = get_binance_all_data()
@@ -221,7 +228,7 @@ def fetch_filtered_coins():
             if ticker['percentage'] > 0:
                 gainers.append({
                     'symbol': symbol,
-                    'clean_symbol': symbol.replace('/USDT', ''),
+                    'clean_symbol': symbol.replace('/USDT', '').upper(),
                     'change_24h': round(ticker['percentage'], 2),
                     'price': ticker['last']
                 })
@@ -253,7 +260,7 @@ def fetch_filtered_coins():
                 
                 is_spot = coin_code in spot_assets
                 is_futures = coin_code in futures_assets
-                # Alpha tag applies if token is in alpha dataset or listed on futures without spot
+                # Alpha tag displays if in Alpha pool or listed in Futures without Spot listing
                 is_alpha = (coin_code in alpha_assets) or (is_futures and not is_spot)
                 
                 matching_coins.append({
