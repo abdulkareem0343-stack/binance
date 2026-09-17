@@ -3,7 +3,6 @@ import ta
 import ccxt
 import requests
 import streamlit as st
-import re
 
 # Page Configuration for Mobile App Look
 st.set_page_config(
@@ -166,8 +165,7 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
 
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
-# Fetch All Binance Spot, Futures, and Alpha Ecosystem Tokens with Multiple Fallbacks
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=900)
 def get_binance_all_data():
     spot_assets = set()
     futures_assets = set()
@@ -177,7 +175,7 @@ def get_binance_all_data():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     }
 
-    # 1. Binance Spot Assets
+    # 1. Spot Assets
     try:
         res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", headers=headers, timeout=10)
         data = res.json()
@@ -187,7 +185,7 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 2. Binance Futures Assets
+    # 2. Futures Assets
     try:
         res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", headers=headers, timeout=10)
         data_f = res_f.json()
@@ -197,7 +195,7 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 3. Binance Alpha Pool Tokens (Primary API)
+    # 3. Binance Web3 & Alpha List Direct Source
     try:
         url_alpha = "https://www.binance.com/bapi/composite/v1/public/promo/cmc/alpha/token/list"
         res_a = requests.get(url_alpha, headers=headers, timeout=10)
@@ -210,10 +208,9 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 4. Fallback Binance Alpha Direct Trading Symbols Endpoint
+    # 4. Futures Tickers Fallback for Alpha
     try:
-        url_alpha_fapi = "https://fapi.binance.com/fapi/v1/ticker/24hr"
-        res_af = requests.get(url_alpha_fapi, headers=headers, timeout=10)
+        res_af = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", headers=headers, timeout=10)
         if res_af.status_code == 200:
             for item in res_af.json():
                 s = item.get('symbol', '').upper()
@@ -222,8 +219,13 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # High-Priority Known Alpha Tokens Hard List Fallback (Includes 4STOCK, RIZ, etc.)
-    known_alpha = {"4STOCK", "RIZ", "NOCH", "ASTER", "MEMECORE", "MORPHO", "VENICE", "STABLE", "SPX", "VIRTUAL", "CHEEMS", "BUILDON", "FARTCOIN", "BULLA", "PONS", "CAP", "UAI", "SLX"}
+    # Complete Expanded Binance Alpha/Early Zone Tokens Base
+    known_alpha = {
+        "4STOCK", "RIZ", "NOCH", "ASTER", "MEMECORE", "MORPHO", "VENICE", "STABLE", 
+        "SPX", "VIRTUAL", "CHEEMS", "BUILDON", "FARTCOIN", "BULLA", "PONS", "CAP", 
+        "UAI", "SLX", "HIGH", "PHA", "SWARM", "PENGU", "GRASS", "DRIFT", "EIGEN", 
+        "TURBO", "NEIRO", "BABYDOGE", "CATI", "HMSTR", "1000SATS", "SATS"
+    }
     alpha_assets.update(known_alpha)
 
     return spot_assets, futures_assets, alpha_assets
@@ -276,7 +278,7 @@ def fetch_filtered_coins():
                 is_spot = coin_code in spot_assets
                 is_futures = coin_code in futures_assets
                 
-                # Check directly in Alpha pool or if token starts with Alpha identifiers
+                # Check directly in Alpha pool, or if token is on Futures but not Spot
                 is_alpha = (coin_code in alpha_assets) or (is_futures and not is_spot)
                 
                 matching_coins.append({
