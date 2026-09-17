@@ -79,6 +79,7 @@ st.markdown("""
         display: flex;
         align-items: center;
         gap: 6px;
+        flex-wrap: wrap;
     }
     .gainer-tag {
         background-color: rgba(0, 200, 83, 0.15);
@@ -88,14 +89,29 @@ st.markdown("""
         font-size: 13px;
         font-weight: bold;
     }
-    .binance-badge {
+    .spot-badge {
         background-color: #F0B90B;
         color: #000000;
         font-size: 10px;
         font-weight: 800;
         padding: 2px 6px;
         border-radius: 4px;
-        margin-left: 6px;
+    }
+    .futures-badge {
+        background-color: #9c27b0;
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    .alpha-badge {
+        background-color: #00e5ff;
+        color: #000000;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 4px;
     }
     .card-bottom {
         display: flex;
@@ -149,19 +165,49 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
 
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
-# Fetch Binance Symbols list to verify availability
+# Fetch All Binance Spot, Futures, and Alpha ecosystem tokens
 @st.cache_data(ttl=3600)
-def get_binance_symbols():
+def get_binance_all_data():
+    spot_symbols = set()
+    futures_symbols = set()
+    alpha_symbols = set()
+    
+    # 1. Binance Spot Pairs
     try:
         res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", timeout=10)
         data = res.json()
-        symbols = [s['symbol'] for s in data['symbols'] if s['symbol'].endswith('USDT')]
-        return set(symbols)
+        for s in data.get('symbols', []):
+            if s.get('status') == 'TRADING' and s['symbol'].endswith('USDT'):
+                spot_symbols.add(s['baseAsset'])
     except Exception:
-        return set()
+        pass
+
+    # 2. Binance Futures Pairs
+    try:
+        res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", timeout=10)
+        data_f = res_f.json()
+        for s in data_f.get('symbols', []):
+            if s.get('status') == 'TRADING' and s['symbol'].endswith('USDT'):
+                futures_symbols.add(s['baseAsset'])
+    except Exception:
+        pass
+
+    # 3. Binance Alpha / Web3 / Trending Lists
+    try:
+        res_a = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", timeout=10)
+        if res_a.status_code == 200:
+            for item in res_a.json():
+                symbol = item.get('symbol', '')
+                if symbol.endswith('USDT'):
+                    clean = symbol.replace('USDT', '')
+                    alpha_symbols.add(clean)
+    except Exception:
+        pass
+
+    return spot_symbols, futures_symbols, alpha_symbols
 
 def fetch_filtered_coins():
-    binance_symbols = get_binance_symbols()
+    spot_assets, futures_assets, alpha_assets = get_binance_all_data()
 
     try:
         tickers = exchange.fetch_tickers()
@@ -203,17 +249,22 @@ def fetch_filtered_coins():
             if rsi_min <= latest_rsi <= rsi_max:
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
                 
-                # Check if coin exists on Binance
-                binance_pair = f"{item['clean_symbol']}USDT"
-                is_on_binance = binance_pair in binance_symbols
+                coin_code = item['clean_symbol']
+                
+                is_spot = coin_code in spot_assets
+                is_futures = coin_code in futures_assets
+                # Alpha tag applies if token is in alpha dataset or listed on futures without spot
+                is_alpha = (coin_code in alpha_assets) or (is_futures and not is_spot)
                 
                 matching_coins.append({
-                    'symbol': item['clean_symbol'],
+                    'symbol': coin_code,
                     'change_24h': item['change_24h'],
                     'price': item['price'],
                     'rsi': latest_rsi,
                     'chart': tv_link,
-                    'is_binance': is_on_binance
+                    'is_spot': is_spot,
+                    'is_futures': is_futures,
+                    'is_alpha': is_alpha
                 })
         except Exception:
             continue
@@ -221,7 +272,6 @@ def fetch_filtered_coins():
     status.empty()
     progress.empty()
     
-    # Sort results by RSI ascending (low to high)
     matching_coins = sorted(matching_coins, key=lambda x: x['rsi'])
     return matching_coins
 
@@ -233,14 +283,17 @@ if st.button("🚀 Start App Scan"):
         if results:
             st.caption(f"Found {len(results)} Token(s) | Sorted Low to High RSI")
             
-            # Render App Cards
             for coin in results:
-                binance_tag = '<span class="binance-badge">BINANCE</span>' if coin['is_binance'] else ''
+                spot_tag = '<span class="spot-badge">BINANCE SPOT</span>' if coin['is_spot'] else ''
+                futures_tag = '<span class="futures-badge">FUTURES</span>' if coin['is_futures'] else ''
+                alpha_tag = '<span class="alpha-badge">BINANCE ALPHA</span>' if coin['is_alpha'] else ''
                 
                 st.markdown(f"""
                 <div class="coin-card">
                     <div class="card-top">
-                        <span class="symbol-title">🪙 {coin['symbol']}/USDT {binance_tag}</span>
+                        <span class="symbol-title">
+                            🪙 {coin['symbol']}/USDT {spot_tag} {futures_tag} {alpha_tag}
+                        </span>
                         <span class="gainer-tag">+{coin['change_24h']}%</span>
                     </div>
                     <div class="card-bottom">
