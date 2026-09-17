@@ -1,5 +1,4 @@
 import pandas as pd
-import ta
 import ccxt
 import requests
 import streamlit as st
@@ -165,6 +164,19 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
 
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
+# Exact TradingView Wilder's Smoothing RSI Formula
+def calculate_tradingview_rsi(prices, period=14):
+    delta = prices.diff()
+    gain = (delta.where(delta > 0, 0))
+    loss = (-delta.where(delta < 0, 0))
+    
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+    
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return round(rsi.iloc[-1], 2)
+
 @st.cache_data(ttl=900)
 def get_binance_all_data():
     spot_assets = set()
@@ -186,7 +198,7 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 2. Fetch Binance Futures Assets (Primary + Fallback)
+    # 2. Fetch Binance Futures Assets
     try:
         res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", headers=headers, timeout=10)
         if res_f.status_code == 200:
@@ -195,13 +207,12 @@ def get_binance_all_data():
                 if s.get('status') == 'TRADING' and s.get('symbol', '').endswith('USDT'):
                     base = s.get('baseAsset', '').upper()
                     futures_assets.add(base)
-                    # Strip numerical prefixes like 1000SATS -> SATS
                     clean_base = base.replace('1000000', '').replace('1000', '')
                     futures_assets.add(clean_base)
     except Exception:
         pass
 
-    # Secondary Futures Ticker Check
+    # Secondary Futures Check
     try:
         res_ft = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", headers=headers, timeout=10)
         if res_ft.status_code == 200:
@@ -214,7 +225,7 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 3. Binance Web3 & Alpha List Direct Source
+    # 3. Binance Alpha Pool Direct List
     try:
         url_alpha = "https://www.binance.com/bapi/composite/v1/public/promo/cmc/alpha/token/list"
         res_a = requests.get(url_alpha, headers=headers, timeout=10)
@@ -227,7 +238,6 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # Expanded Binance Alpha/Early Zone Known List
     known_alpha = {
         "4STOCK", "RIZ", "NOCH", "ASTER", "MEMECORE", "MORPHO", "VENICE", "STABLE", 
         "SPX", "VIRTUAL", "CHEEMS", "BUILDON", "FARTCOIN", "BULLA", "PONS", "CAP", 
@@ -270,13 +280,15 @@ def fetch_filtered_coins():
         progress.progress((i + 1) / limit)
         
         try:
-            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=50)
-            if not ohlcv or len(ohlcv) < 15:
+            # Fetch 200 candles for TradingView exact precision
+            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=200)
+            if not ohlcv or len(ohlcv) < 30:
                 continue
             
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            df['rsi'] = ta.momentum.rsi(df['close'], window=14)
-            latest_rsi = round(df['rsi'].iloc[-1], 2)
+            
+            # Exact Wilder's RSI calculation
+            latest_rsi = calculate_tradingview_rsi(df['close'], period=14)
             
             if rsi_min <= latest_rsi <= rsi_max:
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
