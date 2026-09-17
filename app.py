@@ -1,6 +1,7 @@
 import pandas as pd
 import ta
 import ccxt
+import requests
 import streamlit as st
 
 # Page Configuration for Mobile App Look
@@ -75,6 +76,9 @@ st.markdown("""
         font-size: 16px;
         font-weight: bold;
         color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
     .gainer-tag {
         background-color: rgba(0, 200, 83, 0.15);
@@ -83,6 +87,15 @@ st.markdown("""
         border-radius: 8px;
         font-size: 13px;
         font-weight: bold;
+    }
+    .binance-badge {
+        background-color: #F0B90B;
+        color: #000000;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: 6px;
     }
     .card-bottom {
         display: flex;
@@ -132,12 +145,24 @@ st.markdown("""
 with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False):
     timeframe = st.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
     rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
-    # Limit increased to 400
     top_gainers_count = st.slider("Scan Gainers Count", 20, 400, 150, step=10)
 
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
+# Fetch Binance Symbols list to verify availability
+@st.cache_data(ttl=3600)
+def get_binance_symbols():
+    try:
+        res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", timeout=10)
+        data = res.json()
+        symbols = [s['symbol'] for s in data['symbols'] if s['symbol'].endswith('USDT')]
+        return set(symbols)
+    except Exception:
+        return set()
+
 def fetch_filtered_coins():
+    binance_symbols = get_binance_symbols()
+
     try:
         tickers = exchange.fetch_tickers()
     except Exception as e:
@@ -177,12 +202,18 @@ def fetch_filtered_coins():
             
             if rsi_min <= latest_rsi <= rsi_max:
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
+                
+                # Check if coin exists on Binance
+                binance_pair = f"{item['clean_symbol']}USDT"
+                is_on_binance = binance_pair in binance_symbols
+                
                 matching_coins.append({
                     'symbol': item['clean_symbol'],
                     'change_24h': item['change_24h'],
                     'price': item['price'],
                     'rsi': latest_rsi,
-                    'chart': tv_link
+                    'chart': tv_link,
+                    'is_binance': is_on_binance
                 })
         except Exception:
             continue
@@ -204,10 +235,12 @@ if st.button("🚀 Start App Scan"):
             
             # Render App Cards
             for coin in results:
+                binance_tag = '<span class="binance-badge">BINANCE</span>' if coin['is_binance'] else ''
+                
                 st.markdown(f"""
                 <div class="coin-card">
                     <div class="card-top">
-                        <span class="symbol-title">🪙 {coin['symbol']}/USDT</span>
+                        <span class="symbol-title">🪙 {coin['symbol']}/USDT {binance_tag}</span>
                         <span class="gainer-tag">+{coin['change_24h']}%</span>
                     </div>
                     <div class="card-bottom">
