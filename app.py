@@ -208,18 +208,7 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 4. Futures Tickers Fallback for Alpha
-    try:
-        res_af = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", headers=headers, timeout=10)
-        if res_af.status_code == 200:
-            for item in res_af.json():
-                s = item.get('symbol', '').upper()
-                if s.endswith('USDT'):
-                    alpha_assets.add(s.replace('USDT', ''))
-    except Exception:
-        pass
-
-    # Complete Expanded Binance Alpha/Early Zone Tokens Base
+    # Expanded Binance Alpha/Early Zone Known List
     known_alpha = {
         "4STOCK", "RIZ", "NOCH", "ASTER", "MEMECORE", "MORPHO", "VENICE", "STABLE", 
         "SPX", "VIRTUAL", "CHEEMS", "BUILDON", "FARTCOIN", "BULLA", "PONS", "CAP", 
@@ -277,8 +266,6 @@ def fetch_filtered_coins():
                 
                 is_spot = coin_code in spot_assets
                 is_futures = coin_code in futures_assets
-                
-                # Check directly in Alpha pool, or if token is on Futures but not Spot
                 is_alpha = (coin_code in alpha_assets) or (is_futures and not is_spot)
                 
                 matching_coins.append({
@@ -310,7 +297,7 @@ if st.button("🚀 Start App Scan"):
             
             for coin in results:
                 spot_tag = '<span class="spot-badge">BINANCE SPOT</span>' if coin['is_spot'] else ''
-                futures_tag = '<span class="futures-badge">FUTURES</span>' if coin['is_futures'] else ''
+                futures_tag = '<span class="futures-badge">BINANCE FUTURES</span>' if coin['is_futures'] else ''
                 alpha_tag = '<span class="alpha-badge">BINANCE ALPHA</span>' if coin['is_alpha'] else ''
                 
                 st.markdown(f"""
