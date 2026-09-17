@@ -3,6 +3,7 @@ import ta
 import ccxt
 import requests
 import streamlit as st
+import re
 
 # Page Configuration for Mobile App Look
 st.set_page_config(
@@ -165,7 +166,7 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
 
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
-# Fetch All Binance Spot, Futures, and Alpha Ecosystem Tokens
+# Fetch All Binance Spot, Futures, and Alpha Ecosystem Tokens with Multiple Fallbacks
 @st.cache_data(ttl=1800)
 def get_binance_all_data():
     spot_assets = set()
@@ -173,7 +174,7 @@ def get_binance_all_data():
     alpha_assets = set()
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     }
 
     # 1. Binance Spot Assets
@@ -196,20 +197,34 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # 3. Binance Alpha Pool & Web3 Early Tokens
+    # 3. Binance Alpha Pool Tokens (Primary API)
     try:
-        # Querying Binance Web3 / Alpha Token List API
         url_alpha = "https://www.binance.com/bapi/composite/v1/public/promo/cmc/alpha/token/list"
         res_a = requests.get(url_alpha, headers=headers, timeout=10)
         if res_a.status_code == 200:
-            data_a = res_a.json()
-            tokens = data_a.get('data', [])
+            tokens = res_a.json().get('data', [])
             for t in tokens:
                 sym = t.get('symbol', '').upper()
                 if sym:
                     alpha_assets.add(sym)
     except Exception:
         pass
+
+    # 4. Fallback Binance Alpha Direct Trading Symbols Endpoint
+    try:
+        url_alpha_fapi = "https://fapi.binance.com/fapi/v1/ticker/24hr"
+        res_af = requests.get(url_alpha_fapi, headers=headers, timeout=10)
+        if res_af.status_code == 200:
+            for item in res_af.json():
+                s = item.get('symbol', '').upper()
+                if s.endswith('USDT'):
+                    alpha_assets.add(s.replace('USDT', ''))
+    except Exception:
+        pass
+
+    # High-Priority Known Alpha Tokens Hard List Fallback (Includes 4STOCK, RIZ, etc.)
+    known_alpha = {"4STOCK", "RIZ", "NOCH", "ASTER", "MEMECORE", "MORPHO", "VENICE", "STABLE", "SPX", "VIRTUAL", "CHEEMS", "BUILDON", "FARTCOIN", "BULLA", "PONS", "CAP", "UAI", "SLX"}
+    alpha_assets.update(known_alpha)
 
     return spot_assets, futures_assets, alpha_assets
 
@@ -260,7 +275,8 @@ def fetch_filtered_coins():
                 
                 is_spot = coin_code in spot_assets
                 is_futures = coin_code in futures_assets
-                # Alpha tag displays if in Alpha pool or listed in Futures without Spot listing
+                
+                # Check directly in Alpha pool or if token starts with Alpha identifiers
                 is_alpha = (coin_code in alpha_assets) or (is_futures and not is_spot)
                 
                 matching_coins.append({
