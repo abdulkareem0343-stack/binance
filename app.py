@@ -137,7 +137,8 @@ st.markdown("""
 with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False):
     timeframe = st.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
     rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
-    top_gainers_count = st.slider("Scan Gainers Count", 20, 100, 50, step=10)
+    # Limit increased up to 250 coins
+    top_gainers_count = st.slider("Scan Gainers Count", 20, 250, 100, step=10)
 
 # Exchange setup
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
