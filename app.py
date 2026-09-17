@@ -162,10 +162,11 @@ with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False
     rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
     top_gainers_count = st.slider("Scan Gainers Count", 20, 400, 150, step=10)
 
-exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
+# Switch Exchange directly to Binance for exact price & RSI calculations
+exchange = ccxt.binance({'enableRateLimit': True, 'timeout': 30000})
 
-# Exact TradingView Wilder's Smoothing RSI Formula
-def calculate_tradingview_rsi(prices, period=14):
+# Exact Binance/TradingView Wilder's RSI Formula
+def calculate_binance_rsi(prices, period=14):
     delta = prices.diff()
     gain = (delta.where(delta > 0, 0))
     loss = (-delta.where(delta < 0, 0))
@@ -212,19 +213,6 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # Secondary Futures Check
-    try:
-        res_ft = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", headers=headers, timeout=10)
-        if res_ft.status_code == 200:
-            for item in res_ft.json():
-                s = item.get('symbol', '').upper()
-                if s.endswith('USDT'):
-                    raw_coin = s.replace('USDT', '')
-                    futures_assets.add(raw_coin)
-                    futures_assets.add(raw_coin.replace('1000000', '').replace('1000', ''))
-    except Exception:
-        pass
-
     # 3. Binance Alpha Pool Direct List
     try:
         url_alpha = "https://www.binance.com/bapi/composite/v1/public/promo/cmc/alpha/token/list"
@@ -254,7 +242,7 @@ def fetch_filtered_coins():
     try:
         tickers = exchange.fetch_tickers()
     except Exception as e:
-        st.error(f"Error connecting: {e}")
+        st.error(f"Error connecting to Binance: {e}")
         return []
 
     gainers = []
@@ -276,22 +264,22 @@ def fetch_filtered_coins():
     limit = min(len(gainers), top_gainers_count)
 
     for i, item in enumerate(gainers[:limit]):
-        status.caption(f"Scanning {item['clean_symbol']} ({i+1}/{limit})...")
+        status.caption(f"Scanning Binance {item['clean_symbol']} ({i+1}/{limit})...")
         progress.progress((i + 1) / limit)
         
         try:
-            # Fetch 200 candles for TradingView exact precision
+            # Fetch Binance candles
             ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=200)
             if not ohlcv or len(ohlcv) < 30:
                 continue
             
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
-            # Exact Wilder's RSI calculation
-            latest_rsi = calculate_tradingview_rsi(df['close'], period=14)
+            # Exact Binance RSI calculation
+            latest_rsi = calculate_binance_rsi(df['close'], period=14)
             
             if rsi_min <= latest_rsi <= rsi_max:
-                tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
+                tv_link = f"https://www.tradingview.com/chart/?symbol=BINANCE:{item['clean_symbol']}USDT"
                 
                 coin_code = item['clean_symbol']
                 
@@ -320,7 +308,7 @@ def fetch_filtered_coins():
 
 # Main Mobile Scan Trigger Button
 if st.button("🚀 Start App Scan"):
-    with st.spinner("Scanning Market..."):
+    with st.spinner("Scanning Binance Market..."):
         results = fetch_filtered_coins()
         
         if results:
@@ -346,7 +334,7 @@ if st.button("🚀 Start App Scan"):
                 </div>
                 """, unsafe_allow_html=True)
                 
-                st.markdown(f"[📊 Open TradingView Chart]({coin['chart']})")
+                st.markdown(f"[📊 Open Binance TradingView Chart]({coin['chart']})")
                 st.write("")
         else:
             st.warning(f"Koi coin nahi mila jiska RSI {rsi_min}-{rsi_max} ho.")
