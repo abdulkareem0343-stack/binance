@@ -175,23 +175,42 @@ def get_binance_all_data():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     }
 
-    # 1. Spot Assets
+    # 1. Fetch Binance Spot Assets
     try:
         res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", headers=headers, timeout=10)
-        data = res.json()
-        for s in data.get('symbols', []):
-            if s.get('status') == 'TRADING' and s['symbol'].endswith('USDT'):
-                spot_assets.add(s['baseAsset'].upper())
+        if res.status_code == 200:
+            data = res.json()
+            for s in data.get('symbols', []):
+                if s.get('status') == 'TRADING' and s.get('symbol', '').endswith('USDT'):
+                    spot_assets.add(s.get('baseAsset', '').upper())
     except Exception:
         pass
 
-    # 2. Futures Assets
+    # 2. Fetch Binance Futures Assets (Primary + Fallback)
     try:
         res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", headers=headers, timeout=10)
-        data_f = res_f.json()
-        for s in data_f.get('symbols', []):
-            if s.get('status') == 'TRADING' and s['symbol'].endswith('USDT'):
-                futures_assets.add(s['baseAsset'].upper())
+        if res_f.status_code == 200:
+            data_f = res_f.json()
+            for s in data_f.get('symbols', []):
+                if s.get('status') == 'TRADING' and s.get('symbol', '').endswith('USDT'):
+                    base = s.get('baseAsset', '').upper()
+                    futures_assets.add(base)
+                    # Strip numerical prefixes like 1000SATS -> SATS
+                    clean_base = base.replace('1000000', '').replace('1000', '')
+                    futures_assets.add(clean_base)
+    except Exception:
+        pass
+
+    # Secondary Futures Ticker Check
+    try:
+        res_ft = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr", headers=headers, timeout=10)
+        if res_ft.status_code == 200:
+            for item in res_ft.json():
+                s = item.get('symbol', '').upper()
+                if s.endswith('USDT'):
+                    raw_coin = s.replace('USDT', '')
+                    futures_assets.add(raw_coin)
+                    futures_assets.add(raw_coin.replace('1000000', '').replace('1000', ''))
     except Exception:
         pass
 
@@ -265,7 +284,7 @@ def fetch_filtered_coins():
                 coin_code = item['clean_symbol']
                 
                 is_spot = coin_code in spot_assets
-                is_futures = coin_code in futures_assets
+                is_futures = (coin_code in futures_assets) or (f"1000{coin_code}" in futures_assets)
                 is_alpha = (coin_code in alpha_assets) or (is_futures and not is_spot)
                 
                 matching_coins.append({
