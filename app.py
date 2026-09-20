@@ -88,6 +88,14 @@ st.markdown("""
         font-size: 13px;
         font-weight: bold;
     }
+    .loser-tag {
+        background-color: rgba(255, 23, 68, 0.15);
+        color: #ff1744;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: bold;
+    }
     .spot-badge {
         background-color: #F0B90B;
         color: #000000;
@@ -116,6 +124,7 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: 10px;
     }
     .price-text {
         font-size: 15px;
@@ -129,6 +138,18 @@ st.markdown("""
         border-radius: 8px;
         font-size: 12px;
         font-weight: bold;
+    }
+    .chart-btn {
+        display: block;
+        text-align: center;
+        background: #2a2a2a;
+        color: #2962ff !important;
+        text-decoration: none;
+        padding: 8px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: bold;
+        border: 1px solid #3a3a3a;
     }
     
     .stButton>button {
@@ -157,10 +178,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Controls
-with st.expander("⚙️ Filter Options (Timeframe & RSI Range)", expanded=False):
+with st.expander("⚙️ Filter Options (Gain/Loss & RSI)", expanded=True):
+    scan_type = st.radio("Market Filter", ["🚀 Top Gainers", "📉 Top Losers"], horizontal=True)
     timeframe = st.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
     rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
-    top_gainers_count = st.slider("Scan Gainers Count", 20, 400, 150, step=10)
+    top_coins_count = st.slider("Scan Coins Count", 20, 400, 150, step=10)
 
 # KuCoin Exchange Integration
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
@@ -188,20 +210,22 @@ def get_binance_all_data():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     }
 
-    # Fetch Binance Spot Assets for Tagging
-    try:
-        res = requests.get("https://data-api.binance.vision/api/v3/exchangeInfo", headers=headers, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            for s in data.get('symbols', []):
-                if s.get('status') == 'TRADING' and s.get('symbol', '').endswith('USDT'):
-                    spot_assets.add(s.get('baseAsset', '').upper())
-    except Exception:
-        pass
+    # Fetch Binance Spot Assets
+    for url in ["https://api.binance.com/api/v3/exchangeInfo", "https://data-api.binance.vision/api/v3/exchangeInfo"]:
+        try:
+            res = requests.get(url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                data = res.json()
+                for s in data.get('symbols', []):
+                    if s.get('status') == 'TRADING' and s.get('symbol', '').endswith('USDT'):
+                        spot_assets.add(s.get('baseAsset', '').upper())
+                break
+        except Exception:
+            continue
 
-    # Fetch Binance Futures Assets for Tagging
+    # Fetch Binance Futures Assets
     try:
-        res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", headers=headers, timeout=10)
+        res_f = requests.get("https://fapi.binance.com/fapi/v1/exchangeInfo", headers=headers, timeout=8)
         if res_f.status_code == 200:
             data_f = res_f.json()
             for s in data_f.get('symbols', []):
@@ -213,10 +237,10 @@ def get_binance_all_data():
     except Exception:
         pass
 
-    # Binance Alpha Pool Direct List
+    # Binance Alpha Assets
     try:
         url_alpha = "https://www.binance.com/bapi/composite/v1/public/promo/cmc/alpha/token/list"
-        res_a = requests.get(url_alpha, headers=headers, timeout=10)
+        res_a = requests.get(url_alpha, headers=headers, timeout=8)
         if res_a.status_code == 200:
             tokens = res_a.json().get('data', [])
             for t in tokens:
@@ -236,7 +260,7 @@ def get_binance_all_data():
 
     return spot_assets, futures_assets, alpha_assets
 
-def fetch_filtered_coins():
+def fetch_filtered_coins(is_gainer_mode=True):
     spot_assets, futures_assets, alpha_assets = get_binance_all_data()
 
     try:
@@ -245,42 +269,52 @@ def fetch_filtered_coins():
         st.error(f"Error connecting to KuCoin: {e}")
         return []
 
-    gainers = []
+    selected_pool = []
     for symbol, ticker in tickers.items():
         if symbol.endswith('/USDT') and ticker.get('percentage') is not None:
-            if ticker['percentage'] > 0:
-                gainers.append({
+            pct = ticker['percentage']
+            # Gainers Mode: pct > 0 | Losers Mode: pct < 0
+            if is_gainer_mode and pct > 0:
+                selected_pool.append({
                     'symbol': symbol,
                     'clean_symbol': symbol.replace('/USDT', '').upper(),
-                    'change_24h': round(ticker['percentage'], 2),
+                    'change_24h': round(pct, 2),
+                    'price': ticker['last']
+                })
+            elif not is_gainer_mode and pct < 0:
+                selected_pool.append({
+                    'symbol': symbol,
+                    'clean_symbol': symbol.replace('/USDT', '').upper(),
+                    'change_24h': round(pct, 2),
                     'price': ticker['last']
                 })
     
-    gainers = sorted(gainers, key=lambda x: x['change_24h'], reverse=True)
+    # Sort top gainers (highest positive) or top losers (most negative)
+    if is_gainer_mode:
+        selected_pool = sorted(selected_pool, key=lambda x: x['change_24h'], reverse=True)
+    else:
+        selected_pool = sorted(selected_pool, key=lambda x: x['change_24h'])
+
     matching_coins = []
 
     status = st.empty()
     progress = st.progress(0)
-    limit = min(len(gainers), top_gainers_count)
+    limit = min(len(selected_pool), top_coins_count)
 
-    for i, item in enumerate(gainers[:limit]):
+    for i, item in enumerate(selected_pool[:limit]):
         status.caption(f"Scanning KuCoin {item['clean_symbol']} ({i+1}/{limit})...")
         progress.progress((i + 1) / limit)
         
         try:
-            # Fetch KuCoin OHLCV Candles (200 limit for exact RSI 14 calculation)
             ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=200)
             if not ohlcv or len(ohlcv) < 30:
                 continue
             
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            
-            # Standard RSI 14 Calculation
             latest_rsi = calculate_rsi14(df['close'], period=14)
             
             if rsi_min <= latest_rsi <= rsi_max:
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
-                
                 coin_code = item['clean_symbol']
                 
                 is_spot = coin_code in spot_assets
@@ -306,35 +340,44 @@ def fetch_filtered_coins():
     matching_coins = sorted(matching_coins, key=lambda x: x['rsi'])
     return matching_coins
 
-# Main Mobile Scan Trigger Button
+# State initialization
+if "scan_results" not in st.session_state:
+    st.session_state.scan_results = None
+
 if st.button("🚀 Start App Scan"):
     with st.spinner("Scanning KuCoin Market..."):
-        results = fetch_filtered_coins()
+        is_gainer_selected = "Gainers" in scan_type
+        st.session_state.scan_results = fetch_filtered_coins(is_gainer_mode=is_gainer_selected)
+
+# Render Results
+if st.session_state.scan_results is not None:
+    results = st.session_state.scan_results
+    if results:
+        st.caption(f"Found {len(results)} Token(s) | Sorted Low to High RSI (14)")
         
-        if results:
-            st.caption(f"Found {len(results)} Token(s) | Sorted Low to High RSI (14)")
+        for coin in results:
+            spot_tag = '<span class="spot-badge">BINANCE SPOT</span>' if coin['is_spot'] else ''
+            futures_tag = '<span class="futures-badge">BINANCE FUTURES</span>' if coin['is_futures'] else ''
+            alpha_tag = '<span class="alpha-badge">BINANCE ALPHA</span>' if coin['is_alpha'] else ''
             
-            for coin in results:
-                spot_tag = '<span class="spot-badge">BINANCE SPOT</span>' if coin['is_spot'] else ''
-                futures_tag = '<span class="futures-badge">BINANCE FUTURES</span>' if coin['is_futures'] else ''
-                alpha_tag = '<span class="alpha-badge">BINANCE ALPHA</span>' if coin['is_alpha'] else ''
-                
-                st.markdown(f"""
-                <div class="coin-card">
-                    <div class="card-top">
-                        <span class="symbol-title">
-                            🪙 {coin['symbol']}/USDT {spot_tag} {futures_tag} {alpha_tag}
-                        </span>
-                        <span class="gainer-tag">+{coin['change_24h']}%</span>
-                    </div>
-                    <div class="card-bottom">
-                        <span class="price-text">${coin['price']}</span>
-                        <span class="rsi-badge">RSI(14): {coin['rsi']}</span>
-                    </div>
+            # Badge CSS based on positive/negative change
+            pct = coin['change_24h']
+            change_badge = f'<span class="gainer-tag">+{pct}%</span>' if pct >= 0 else f'<span class="loser-tag">{pct}%</span>'
+            
+            st.markdown(f"""
+            <div class="coin-card">
+                <div class="card-top">
+                    <span class="symbol-title">
+                        🪙 {coin['symbol']}/USDT {spot_tag} {futures_tag} {alpha_tag}
+                    </span>
+                    {change_badge}
                 </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f"[📊 Open KuCoin TradingView Chart]({coin['chart']})")
-                st.write("")
-        else:
-            st.warning(f"Koi coin nahi mila jiska RSI {rsi_min}-{rsi_max} ho.")
+                <div class="card-bottom">
+                    <span class="price-text">${coin['price']}</span>
+                    <span class="rsi-badge">RSI(14): {coin['rsi']}</span>
+                </div>
+                <a href="{coin['chart']}" target="_blank" class="chart-btn">📊 Open TradingView Chart</a>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.warning(f"No coins found matching your selected filters.")
