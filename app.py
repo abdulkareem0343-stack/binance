@@ -131,12 +131,24 @@ st.markdown("""
         font-weight: 600;
         color: #b0bec5;
     }
+    .rsi-container {
+        display: flex;
+        gap: 6px;
+    }
     .rsi-badge {
         background: linear-gradient(135deg, #2962ff 0%, #00b0ff 100%);
         color: white;
-        padding: 4px 10px;
+        padding: 4px 8px;
         border-radius: 8px;
-        font-size: 12px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+    .rsi200-badge {
+        background: linear-gradient(135deg, #7b1fa2 0%, #e040fb 100%);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 11px;
         font-weight: bold;
     }
     .chart-btn {
@@ -181,14 +193,20 @@ st.markdown("""
 with st.expander("⚙️ Filter Options (Gain/Loss & RSI)", expanded=True):
     scan_type = st.radio("Market Filter", ["🚀 Top Gainers", "📉 Top Losers"], horizontal=True)
     timeframe = st.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
-    rsi_min, rsi_max = st.slider("RSI Range", 0, 100, (30, 50))
+    
+    # RSI 14 Range
+    rsi14_min, rsi14_max = st.slider("RSI (14) Range", 0, 100, (30, 50))
+    
+    # RSI 200 Range
+    rsi200_min, rsi200_max = st.slider("RSI (200) Range", 0, 100, (30, 70))
+    
     top_coins_count = st.slider("Scan Coins Count", 20, 400, 150, step=10)
 
 # KuCoin Exchange Integration
 exchange = ccxt.kucoin({'enableRateLimit': True, 'timeout': 30000})
 
-# Exact Wilder's RSI (14) Formula
-def calculate_rsi14(prices, period=14):
+# Generic Wilder's RSI Formula
+def calculate_rsi(prices, period=14):
     delta = prices.diff()
     gain = (delta.where(delta > 0, 0))
     loss = (-delta.where(delta < 0, 0))
@@ -306,78 +324,72 @@ def fetch_filtered_coins(is_gainer_mode=True):
         progress.progress((i + 1) / limit)
         
         try:
-            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=200)
-            if not ohlcv or len(ohlcv) < 30:
+            # Fetching 350 candles so RSI(200) has enough historical data to calculate accurately
+            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=350)
+            if not ohlcv or len(ohlcv) < 205:
                 continue
             
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-            latest_rsi = calculate_rsi14(df['close'], period=14)
             
-            if rsi_min <= latest_rsi <= rsi_max:
+            latest_rsi14 = calculate_rsi(df['close'], period=14)
+            latest_rsi200 = calculate_rsi(df['close'], period=200)
+            
+            # Check if both RSI 14 and RSI 200 fall inside selected ranges
+            if (rsi14_min <= latest_rsi14 <= rsi14_max) and (rsi200_min <= latest_rsi200 <= rsi200_max):
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
+                
                 coin_code = item['clean_symbol']
-                
                 is_spot = coin_code in spot_assets
-                is_futures = (coin_code in futures_assets) or (f"1000{coin_code}" in futures_assets)
-                is_alpha = (coin_code in alpha_assets) or (is_futures and not is_spot)
-                
-                matching_coins.append({
-                    'symbol': coin_code,
-                    'change_24h': item['change_24h'],
-                    'price': item['price'],
-                    'rsi': latest_rsi,
-                    'chart': tv_link,
-                    'is_spot': is_spot,
-                    'is_futures': is_futures,
-                    'is_alpha': is_alpha
-                })
+                is_futures = coin_code in futures_assets
+                is_alpha = coin_code in alpha_assets
+
+                badges_html = ""
+                if is_spot:
+                    badges_html += '<span class="spot-badge">SPOT</span> '
+                if is_futures:
+                    badges_html += '<span class="futures-badge">FUTURES</span> '
+                if is_alpha:
+                    badges_html += '<span class="alpha-badge">ALPHA</span> '
+
+                change_class = "gainer-tag" if item['change_24h'] >= 0 else "loser-tag"
+                change_sign = "+" if item['change_24h'] >= 0 else ""
+
+                card_html = f"""
+                <div class="coin-card">
+                    <div class="card-top">
+                        <div class="symbol-title">
+                            {item['clean_symbol']}
+                            {badges_html}
+                        </div>
+                        <div class="{change_class}">
+                            {change_sign}{item['change_24h']}%
+                        </div>
+                    </div>
+                    <div class="card-bottom">
+                        <div class="price-text">${item['price']}</div>
+                        <div class="rsi-container">
+                            <div class="rsi-badge">RSI14: {latest_rsi14}</div>
+                            <div class="rsi200-badge">RSI200: {latest_rsi200}</div>
+                        </div>
+                    </div>
+                    <a href="{tv_link}" target="_blank" class="chart-btn">📈 Open Chart</a>
+                </div>
+                """
+                matching_coins.append(card_html)
         except Exception:
             continue
-            
+
     status.empty()
     progress.empty()
-    
-    matching_coins = sorted(matching_coins, key=lambda x: x['rsi'])
     return matching_coins
 
-# State initialization
-if "scan_results" not in st.session_state:
-    st.session_state.scan_results = None
-
-if st.button("🚀 Start App Scan"):
-    with st.spinner("Scanning KuCoin Market..."):
-        is_gainer_selected = "Gainers" in scan_type
-        st.session_state.scan_results = fetch_filtered_coins(is_gainer_mode=is_gainer_selected)
-
-# Render Results
-if st.session_state.scan_results is not None:
-    results = st.session_state.scan_results
+# Main Trigger Button
+is_gainer = (scan_type == "🚀 Top Gainers")
+if st.button("🔍 Run Crypto Scan"):
+    results = fetch_filtered_coins(is_gainer_mode=is_gainer)
     if results:
-        st.caption(f"Found {len(results)} Token(s) | Sorted Low to High RSI (14)")
-        
-        for coin in results:
-            spot_tag = '<span class="spot-badge">BINANCE SPOT</span>' if coin['is_spot'] else ''
-            futures_tag = '<span class="futures-badge">BINANCE FUTURES</span>' if coin['is_futures'] else ''
-            alpha_tag = '<span class="alpha-badge">BINANCE ALPHA</span>' if coin['is_alpha'] else ''
-            
-            # Badge CSS based on positive/negative change
-            pct = coin['change_24h']
-            change_badge = f'<span class="gainer-tag">+{pct}%</span>' if pct >= 0 else f'<span class="loser-tag">{pct}%</span>'
-            
-            st.markdown(f"""
-            <div class="coin-card">
-                <div class="card-top">
-                    <span class="symbol-title">
-                        🪙 {coin['symbol']}/USDT {spot_tag} {futures_tag} {alpha_tag}
-                    </span>
-                    {change_badge}
-                </div>
-                <div class="card-bottom">
-                    <span class="price-text">${coin['price']}</span>
-                    <span class="rsi-badge">RSI(14): {coin['rsi']}</span>
-                </div>
-                <a href="{coin['chart']}" target="_blank" class="chart-btn">📊 Open TradingView Chart</a>
-            </div>
-            """, unsafe_allow_html=True)
+        st.success(f"Found {len(results)} matching coins!")
+        for card in results:
+            st.markdown(card, unsafe_allow_html=True)
     else:
-        st.warning(f"No coins found matching your selected filters.")
+        st.warning("No coins found matching your criteria. Try adjusting the RSI ranges or timeframe.")
