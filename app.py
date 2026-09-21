@@ -194,12 +194,20 @@ with st.expander("⚙️ Filter Options (Gain/Loss & RSI)", expanded=True):
     scan_type = st.radio("Market Filter", ["🚀 Top Gainers", "📉 Top Losers"], horizontal=True)
     timeframe = st.selectbox("Timeframe", ["15m", "5m", "1h", "4h"], index=0)
     
-    # RSI 14 Range
-    rsi14_min, rsi14_max = st.slider("RSI (14) Range", 0, 100, (30, 50))
+    st.markdown("---")
+    st.write("**Select RSI Filters to Apply:**")
     
-    # RSI 200 Range
-    rsi200_min, rsi200_max = st.slider("RSI (200) Range", 0, 100, (30, 70))
+    # Checkbox for RSI 14
+    use_rsi14 = st.checkbox("Enable RSI (14) Filter", value=True)
+    if use_rsi14:
+        rsi14_min, rsi14_max = st.slider("RSI (14) Range", 0, 100, (30, 50))
     
+    # Checkbox for RSI 200
+    use_rsi200 = st.checkbox("Enable RSI (200) Filter", value=False)
+    if use_rsi200:
+        rsi200_min, rsi200_max = st.slider("RSI (200) Range", 0, 100, (30, 70))
+        
+    st.markdown("---")
     top_coins_count = st.slider("Scan Coins Count", 20, 400, 150, step=10)
 
 # KuCoin Exchange Integration
@@ -291,7 +299,6 @@ def fetch_filtered_coins(is_gainer_mode=True):
     for symbol, ticker in tickers.items():
         if symbol.endswith('/USDT') and ticker.get('percentage') is not None:
             pct = ticker['percentage']
-            # Gainers Mode: pct > 0 | Losers Mode: pct < 0
             if is_gainer_mode and pct > 0:
                 selected_pool.append({
                     'symbol': symbol,
@@ -307,7 +314,6 @@ def fetch_filtered_coins(is_gainer_mode=True):
                     'price': ticker['last']
                 })
     
-    # Sort top gainers (highest positive) or top losers (most negative)
     if is_gainer_mode:
         selected_pool = sorted(selected_pool, key=lambda x: x['change_24h'], reverse=True)
     else:
@@ -324,18 +330,30 @@ def fetch_filtered_coins(is_gainer_mode=True):
         progress.progress((i + 1) / limit)
         
         try:
-            # Fetching 350 candles so RSI(200) has enough historical data to calculate accurately
-            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=350)
-            if not ohlcv or len(ohlcv) < 205:
+            # Need 350 candles if RSI200 is enabled
+            fetch_limit = 350 if use_rsi200 else 100
+            ohlcv = exchange.fetch_ohlcv(item['symbol'], timeframe=timeframe, limit=fetch_limit)
+            
+            min_candles_required = 205 if use_rsi200 else 30
+            if not ohlcv or len(ohlcv) < min_candles_required:
                 continue
             
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
-            latest_rsi14 = calculate_rsi(df['close'], period=14)
-            latest_rsi200 = calculate_rsi(df['close'], period=200)
-            
-            # Check if both RSI 14 and RSI 200 fall inside selected ranges
-            if (rsi14_min <= latest_rsi14 <= rsi14_max) and (rsi200_min <= latest_rsi200 <= rsi200_max):
+            # Check RSI conditions dynamically based on checkboxes
+            rsi14_passed = True
+            latest_rsi14 = None
+            if use_rsi14:
+                latest_rsi14 = calculate_rsi(df['close'], period=14)
+                rsi14_passed = (rsi14_min <= latest_rsi14 <= rsi14_max)
+
+            rsi200_passed = True
+            latest_rsi200 = None
+            if use_rsi200:
+                latest_rsi200 = calculate_rsi(df['close'], period=200)
+                rsi200_passed = (rsi200_min <= latest_rsi200 <= rsi200_max)
+
+            if rsi14_passed and rsi200_passed:
                 tv_link = f"https://www.tradingview.com/chart/?symbol=KUCOIN:{item['clean_symbol']}USDT"
                 
                 coin_code = item['clean_symbol']
@@ -354,27 +372,26 @@ def fetch_filtered_coins(is_gainer_mode=True):
                 change_class = "gainer-tag" if item['change_24h'] >= 0 else "loser-tag"
                 change_sign = "+" if item['change_24h'] >= 0 else ""
 
-                card_html = f"""
-                <div class="coin-card">
-                    <div class="card-top">
-                        <div class="symbol-title">
-                            {item['clean_symbol']}
-                            {badges_html}
-                        </div>
-                        <div class="{change_class}">
-                            {change_sign}{item['change_24h']}%
-                        </div>
-                    </div>
-                    <div class="card-bottom">
-                        <div class="price-text">${item['price']}</div>
-                        <div class="rsi-container">
-                            <div class="rsi-badge">RSI14: {latest_rsi14}</div>
-                            <div class="rsi200-badge">RSI200: {latest_rsi200}</div>
-                        </div>
-                    </div>
-                    <a href="{tv_link}" target="_blank" class="chart-btn">📈 Open Chart</a>
-                </div>
-                """
+                # Display badges conditionally
+                rsi_badges_html = ""
+                if latest_rsi14 is not None:
+                    rsi_badges_html += f'<div class="rsi-badge">RSI14: {latest_rsi14}</div>'
+                if latest_rsi200 is not None:
+                    rsi_badges_html += f'<div class="rsi200-badge">RSI200: {latest_rsi200}</div>'
+
+                card_html = (
+                    f'<div class="coin-card">'
+                    f'  <div class="card-top">'
+                    f'    <div class="symbol-title">{item["clean_symbol"]} {badges_html}</div>'
+                    f'    <div class="{change_class}">{change_sign}{item["change_24h"]}%</div>'
+                    f'  </div>'
+                    f'  <div class="card-bottom">'
+                    f'    <div class="price-text">${item["price"]}</div>'
+                    f'    <div class="rsi-container">{rsi_badges_html}</div>'
+                    f'  </div>'
+                    f'  <a href="{tv_link}" target="_blank" class="chart-btn">📈 Open Chart</a>'
+                    f'</div>'
+                )
                 matching_coins.append(card_html)
         except Exception:
             continue
@@ -386,10 +403,13 @@ def fetch_filtered_coins(is_gainer_mode=True):
 # Main Trigger Button
 is_gainer = (scan_type == "🚀 Top Gainers")
 if st.button("🔍 Run Crypto Scan"):
-    results = fetch_filtered_coins(is_gainer_mode=is_gainer)
-    if results:
-        st.success(f"Found {len(results)} matching coins!")
-        for card in results:
-            st.markdown(card, unsafe_allow_html=True)
+    if not use_rsi14 and not use_rsi200:
+        st.warning("Kambaskam ek RSI filter (RSI 14 ya RSI 200) select karein!")
     else:
-        st.warning("No coins found matching your criteria. Try adjusting the RSI ranges or timeframe.")
+        results = fetch_filtered_coins(is_gainer_mode=is_gainer)
+        if results:
+            st.success(f"Found {len(results)} matching coins!")
+            for card in results:
+                st.markdown(card, unsafe_allow_html=True)
+        else:
+            st.warning("No coins found matching your criteria. Try adjusting the RSI ranges or timeframe.")
